@@ -1,17 +1,17 @@
 {
-  "name": "paste-helper",
+  "name": "file-paste",
   "type": "module",
   "version": "0.0.1",
   "description": "",
   "author": "Simon He",
   "license": "MIT",
   "funding": "https://github.com/sponsors/Simon-He95",
-  "homepage": "https://github.com/Simon-He95/paste-helper#readme",
+  "homepage": "https://github.com/Simon-He95/file-paste#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Simon-He95/paste-helper.git"
+    "url": "git+https://github.com/Simon-He95/file-paste.git"
   },
-  "bugs": "https://github.com/Simon-He95/paste-helper/issues",
+  "bugs": "https://github.com/Simon-He95/file-paste/issues",
   "keywords": [],
   "sideEffects": false,
   "exports": {
