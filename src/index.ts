@@ -18,6 +18,7 @@
  *   可以是字符串或接收文件名和类型的函数。
  * @param {Function} [option.preProcessFile] - 在处理文件之前对其进行预处理的回调。
  *   接收文件并返回处理后的文件或 null（如果文件被过滤）。
+ * @param {boolean} [option.splitFormData] - 控制是否分割 FormData 当 returnType 为 'formData' 有效。
  * @returns {Function} 清理函数，用于移除粘贴事件监听器并释放资源。
  */
 export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData' = 'blob'>(option: {
@@ -25,20 +26,22 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
   returnType?: T
   allowedTypes?: string[]
   onComplete?: T extends 'formData'
-    ? (files: FormData) => void
+    ? (files: FormData | FormData[]) => void
     : (files: { name: string, size: number, type: string, content: any, previewUrl: string }[]) => void
   onError?: (error: { file: File, reason: string }) => void
   debug?: boolean
   preProcess?: (file: File, content: any) => any
   formDataKey?: string | ((fileName: string, fileType: string) => string)
   preProcessFile?: (file: File) => File
+  splitFormData?: boolean // 新增属性，控制是否分割 FormData
 }) {
   const returnType = option.returnType || 'blob'
   const processedFiles: { name: string, size: number, type: string, content: any, previewUrl: string }[] = []
   const formData = new FormData()
+  const formDataList: FormData[] = [] // 用于存储多个 FormData
   const errorPromises: Promise<void>[] = []
   let processedCount = 0
-  let totalFiles = 0 // 提升 totalFiles 的作用域
+  let totalFiles = 0
 
   const handleFileRead = (file: File, content: any): Blob | ArrayBuffer | string => {
     if (option.returnType === 'blob') {
@@ -52,12 +55,12 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
     }
   }
 
-  const appendToFormData = (file: File) => {
+  const appendToFormData = (file: File, targetFormData: FormData) => {
     const key
       = typeof option.formDataKey === 'function'
         ? option.formDataKey(file.name, file.type)
         : option.formDataKey || file.name
-    formData.append(key, file)
+    targetFormData.append(key, file)
   }
 
   const addToProcessedFiles = (file: File, content: any) => {
@@ -85,7 +88,12 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
     }
     if (processedCount === totalFiles && option.onComplete) {
       if (returnType === 'formData') {
-        option.onComplete(formData as any)
+        if (option.splitFormData) {
+          option.onComplete(formDataList as any)
+        }
+        else {
+          option.onComplete(formData as any)
+        }
       }
       else {
         option.onComplete(processedFiles as any)
@@ -125,7 +133,14 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
           const content = e.target?.result
           if (content) {
             if (returnType === 'formData') {
-              appendToFormData(processedFile)
+              if (option.splitFormData) {
+                const singleFormData = new FormData()
+                appendToFormData(processedFile, singleFormData)
+                formDataList.push(singleFormData)
+              }
+              else {
+                appendToFormData(processedFile, formData)
+              }
             }
             else {
               addToProcessedFiles(processedFile, content)
@@ -141,7 +156,14 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
           reader.readAsBinaryString(processedFile)
         }
         else if (returnType === 'formData') {
-          appendToFormData(processedFile)
+          if (option.splitFormData) {
+            const singleFormData = new FormData()
+            appendToFormData(processedFile, singleFormData)
+            formDataList.push(singleFormData)
+          }
+          else {
+            appendToFormData(processedFile, formData)
+          }
           handleFileProcessed()
         }
         else {
