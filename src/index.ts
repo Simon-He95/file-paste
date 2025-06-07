@@ -1,3 +1,6 @@
+import type { ProcessedFile } from './type'
+export * from './type'
+
 /**
  * 处理文件粘贴事件，具有健壮的错误处理、资源管理和灵活的配置。
  *
@@ -27,7 +30,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
   allowedTypes?: string[]
   onComplete?: T extends 'formData'
     ? (files: FormData | FormData[]) => void
-    : (files: { name: string, size: number, type: string, content: any, previewUrl: string }[]) => void
+    : (files: ProcessedFile[]) => void
   onError?: (error: { file: File, reason: string }) => void
   debug?: boolean
   preProcess?: (file: File, content: any) => any
@@ -36,7 +39,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
   splitFormData?: boolean // 新增属性，控制是否分割 FormData
 }) {
   const returnType = option.returnType || 'blob'
-  const processedFiles: { name: string, size: number, type: string, content: any, previewUrl: string }[] = []
+  const processedFiles: ProcessedFile[] = []
   const formData = new FormData()
   const formDataList: FormData[] = [] // 用于存储多个 FormData
   const errorPromises: Promise<void>[] = []
@@ -72,6 +75,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
       type: file.type,
       content: processedContent,
       previewUrl,
+      lastModified: file.lastModified, // 新增 lastModified 属性
     })
   }
 
