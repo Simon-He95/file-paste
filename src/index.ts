@@ -1,4 +1,5 @@
 import type { ProcessedFile } from './type'
+
 export * from './type'
 
 /**

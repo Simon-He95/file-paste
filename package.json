@@ -51,9 +51,9 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^3.16.0",
-    "@types/node": "^18.19.50",
+    "@types/node": "^18.19.111",
     "bumpp": "^8.2.1",
-    "eslint": "^9.25.1",
+    "eslint": "^9.28.0",
     "lint-staged": "^13.3.0",
     "picocolors": "^1.1.1",
     "prettier": "^2.8.8",
