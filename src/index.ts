@@ -88,13 +88,45 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
     targetFormData.append(key, file)
   }
 
+  const removeFileHelper = (processedFile: ProcessedFile, index: number) => {
+    if (processedFile.isRemoved) {
+      if (option.debug) {
+        console.warn(`File ${processedFile.name} is already removed.`)
+      }
+      return
+    }
+    // 从 processedFiles 中移除该文件
+    processedFiles.splice(index, 1)
+    // 释放预览 URL
+    if (processedFile.previewUrl) {
+      URL.revokeObjectURL(processedFile.previewUrl)
+    }
+    processedFile.isRemoved = true
+    // 更新总文件数
+    totalFiles--
+    if (option.debug) {
+      // eslint-disable-next-line no-console
+      console.log(`Removed file: ${processedFile.name}. Total files: ${totalFiles}.`)
+    }
+    // 调用 onProgress 回调
+    option.onProgress?.({
+      processedCount,
+      totalFiles,
+      processedFiles: processedFiles.map(file => ({ ...file, status: file?.status || 'pending' })),
+      done: processedCount === totalFiles,
+    })
+  }
+
   const addToProcessedFiles = (processedFile: ProcessedFile, content: any, index: number) => {
     const processedContent = option.preProcess ? option.preProcess(processedFile.file, content) : handleFileRead(processedFile.file, content)
-    const updatedFile = {
+    const updatedFile: ProcessedFile = {
       ...processedFile,
       content: processedContent,
       status: 'done',
-    } as ProcessedFile
+      removeFile: () => {
+        removeFileHelper(updatedFile, index)
+      },
+    }
     processedFiles[index] = updatedFile
   }
 
@@ -138,7 +170,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
     const fileItems = Array.from(items).filter(item => item.kind === 'file')
     totalFiles = fileItems.length
 
-    processedFiles = fileItems.map((item) => {
+    processedFiles = fileItems.map((item, index) => {
       const file = item.getAsFile()
       if (!file)
         return null
@@ -156,17 +188,22 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
         handleError({ file, reason: 'File was filtered out by preProcessFile hook.' })
         return null
       }
-
-      return {
+      const previewUrl = URL.createObjectURL(processedFile)
+      const result: ProcessedFile = {
         name: processedFile.name,
         size: processedFile.size,
         type: processedFile.type,
         content: null,
-        previewUrl: URL.createObjectURL(processedFile),
+        previewUrl,
         lastModified: processedFile.lastModified,
         status: 'pending',
+        isRemoved: false,
+        removeFile: () => {
+          removeFileHelper(result, index)
+        },
         file: processedFile,
       }
+      return result
     }).filter(Boolean) as ProcessedFile[]
 
     option.onProgress?.({
@@ -180,6 +217,12 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
       const reader = new FileReader()
       reader.onload = (e) => {
         const content = e.target?.result
+        if (processedFile.isRemoved) {
+          if (option.debug) {
+            console.warn(`File ${processedFile.name} is already removed.`)
+          }
+          return
+        }
         if (content) {
           if (returnType === 'formData') {
             if (option.splitFormData) {
