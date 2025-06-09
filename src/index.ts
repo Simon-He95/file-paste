@@ -23,6 +23,12 @@ export * from './type'
  * @param {Function} [option.preProcessFile] - 在处理文件之前对其进行预处理的回调。
  *   接收文件并返回处理后的文件或 null（如果文件被过滤）。
  * @param {boolean} [option.splitFormData] - 控制是否分割 FormData 当 returnType 为 'formData' 有效。
+ * @param {Function} [option.onProgress] - 文件处理进度更新回调。
+ *   接收进度信息对象，包含以下字段：
+ *   - `processedCount`：已处理的文件数量。
+ *   - `totalFiles`：总文件数量。
+ *   - `processedFiles`：当前已处理的文件列表。
+ *   - `done`：是否所有文件都已处理完成。
  * @returns {Function} 清理函数，用于移除粘贴事件监听器并释放资源。
  */
 export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData' = 'blob'>(option: {
@@ -36,13 +42,28 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
   debug?: boolean
   preProcess?: (file: File, content: any) => any
   formDataKey?: string | ((fileName: string, fileType: string) => string)
+  /**
+   * 文件处理进度更新回调。
+   *
+   * @param {object} info - 进度信息。
+   * @param {number} info.processedCount - 已处理的文件数量。
+   * @param {number} info.totalFiles - 总文件数量。
+   * @param {ProcessedFile[]} info.processedFiles - 当前已处理的文件列表。
+   * @param {boolean} info.done - 是否所有文件都已处理完成。
+   */
+  onProgress?: (info: {
+    processedCount: number
+    totalFiles: number
+    processedFiles: ProcessedFile[]
+    done: boolean
+  }) => void
   preProcessFile?: (file: File) => File
-  splitFormData?: boolean // 新增属性，控制是否分割 FormData
+  splitFormData?: boolean
 }) {
   const returnType = option.returnType || 'blob'
-  const processedFiles: ProcessedFile[] = []
+  let processedFiles: ProcessedFile[] = []
   const formData = new FormData()
-  const formDataList: FormData[] = [] // 用于存储多个 FormData
+  const formDataList: FormData[] = []
   const errorPromises: Promise<void>[] = []
   let processedCount = 0
   let totalFiles = 0
@@ -55,7 +76,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
       return content as ArrayBuffer
     }
     else {
-      return content as string // 默认返回文本
+      return content as string
     }
   }
 
@@ -67,17 +88,14 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
     targetFormData.append(key, file)
   }
 
-  const addToProcessedFiles = (file: File, content: any) => {
-    const processedContent = option.preProcess ? option.preProcess(file, content) : handleFileRead(file, content)
-    const previewUrl = URL.createObjectURL(new Blob([content], { type: file.type }))
-    processedFiles.push({
-      name: file.name,
-      size: file.size,
-      type: file.type,
+  const addToProcessedFiles = (processedFile: ProcessedFile, content: any, index: number) => {
+    const processedContent = option.preProcess ? option.preProcess(processedFile.file, content) : handleFileRead(processedFile.file, content)
+    const updatedFile = {
+      ...processedFile,
       content: processedContent,
-      previewUrl,
-      lastModified: file.lastModified, // 新增 lastModified 属性
-    })
+      status: 'done',
+    } as ProcessedFile
+    processedFiles[index] = updatedFile
   }
 
   const handleError = (error: { file: File, reason: string }) => {
@@ -104,6 +122,12 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
         option.onComplete(processedFiles as any)
       }
     }
+    option.onProgress?.({
+      processedCount,
+      totalFiles,
+      processedFiles: processedFiles.map(file => ({ ...file, status: file?.status || 'pending' })),
+      done: processedCount === totalFiles,
+    })
   }
 
   const pasteHandler = (event: ClipboardEvent) => {
@@ -112,79 +136,95 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
       return
 
     const fileItems = Array.from(items).filter(item => item.kind === 'file')
-    totalFiles = fileItems.length // 在 pasteHandler 中设置 totalFiles
+    totalFiles = fileItems.length
 
-    for (const item of fileItems) {
+    processedFiles = fileItems.map((item) => {
       const file = item.getAsFile()
-      if (file) {
-        if (option.allowedTypes && !option.allowedTypes.includes(file.type)) {
-          handleError({ file, reason: `File type ${file.type} is not allowed.` })
-          continue
-        }
-        if (option.maxSize && file.size > option.maxSize) {
-          handleError({ file, reason: `File size ${file.size} exceeds the maximum size of ${option.maxSize} bytes.` })
-          continue
-        }
+      if (!file)
+        return null
+      if (option.allowedTypes && !option.allowedTypes.includes(file.type)) {
+        handleError({ file, reason: `File type ${file.type} is not allowed.` })
+        return null
+      }
+      if (option.maxSize && file.size > option.maxSize) {
+        handleError({ file, reason: `File size ${file.size} exceeds the maximum size of ${option.maxSize} bytes.` })
+        return null
+      }
 
-        // Apply preProcessFile hook
-        const processedFile = option.preProcessFile ? option.preProcessFile(file) : file
-        if (!processedFile) {
-          handleError({ file, reason: 'File was filtered out by preProcessFile hook.' })
-          continue
-        }
+      const processedFile = option.preProcessFile ? option.preProcessFile(file) : file
+      if (!processedFile) {
+        handleError({ file, reason: 'File was filtered out by preProcessFile hook.' })
+        return null
+      }
 
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          const content = e.target?.result
-          if (content) {
-            if (returnType === 'formData') {
-              if (option.splitFormData) {
-                const singleFormData = new FormData()
-                appendToFormData(processedFile, singleFormData)
-                formDataList.push(singleFormData)
-              }
-              else {
-                appendToFormData(processedFile, formData)
-              }
+      return {
+        name: processedFile.name,
+        size: processedFile.size,
+        type: processedFile.type,
+        content: null,
+        previewUrl: URL.createObjectURL(processedFile),
+        lastModified: processedFile.lastModified,
+        status: 'pending',
+        file: processedFile,
+      }
+    }).filter(Boolean) as ProcessedFile[]
+
+    option.onProgress?.({
+      processedCount,
+      totalFiles,
+      processedFiles,
+      done: false,
+    })
+
+    processedFiles.forEach((processedFile, index) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const content = e.target?.result
+        if (content) {
+          if (returnType === 'formData') {
+            if (option.splitFormData) {
+              const singleFormData = new FormData()
+              appendToFormData(processedFile.file, singleFormData)
+              formDataList.push(singleFormData)
             }
             else {
-              addToProcessedFiles(processedFile, content)
+              appendToFormData(processedFile.file, formData)
             }
           }
-          handleFileProcessed()
-        }
-
-        if (returnType === 'arrayBuffer') {
-          reader.readAsArrayBuffer(processedFile)
-        }
-        else if (returnType === 'blob') {
-          reader.readAsBinaryString(processedFile)
-        }
-        else if (returnType === 'formData') {
-          if (option.splitFormData) {
-            const singleFormData = new FormData()
-            appendToFormData(processedFile, singleFormData)
-            formDataList.push(singleFormData)
-          }
           else {
-            appendToFormData(processedFile, formData)
+            addToProcessedFiles(processedFile, content, index)
           }
-          handleFileProcessed()
+        }
+        handleFileProcessed()
+      }
+
+      if (returnType === 'arrayBuffer') {
+        reader.readAsArrayBuffer(processedFile.file)
+      }
+      else if (returnType === 'blob') {
+        reader.readAsBinaryString(processedFile.file)
+      }
+      else if (returnType === 'formData') {
+        if (option.splitFormData) {
+          const singleFormData = new FormData()
+          appendToFormData(processedFile.file, singleFormData)
+          formDataList.push(singleFormData)
         }
         else {
-          reader.readAsText(processedFile)
+          appendToFormData(processedFile.file, formData)
         }
+        handleFileProcessed()
       }
-    }
+      else {
+        reader.readAsText(processedFile.file)
+      }
+    })
   }
 
   document.addEventListener('paste', pasteHandler)
 
   return () => {
-    // 移除事件监听器
     document.removeEventListener('paste', pasteHandler)
-
-    // 释放所有临时 URL
     processedFiles.forEach((file) => {
       if (file.previewUrl) {
         URL.revokeObjectURL(file.previewUrl)
