@@ -4,6 +4,7 @@
   "version": "0.0.5",
   "description": "",
   "author": "Simon He",
+  "packageManager": "pnpm@10.11.1",
   "license": "MIT",
   "funding": "https://github.com/sponsors/Simon-He95",
   "homepage": "https://github.com/Simon-He95/file-paste#readme",
