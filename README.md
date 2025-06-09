@@ -12,6 +12,7 @@ file-paste 是一个开箱即用的工具，用于捕获粘贴事件并对粘贴
 - **文件预处理钩子**：支持在文件处理前进行过滤或压缩。
 - **错误处理**：提供回调函数处理文件处理过程中的错误。
 - **调试模式**：可启用调试日志，跟踪文件处理进度。
+- **实时进度更新**：通过 `onProgress` 回调实时获取文件处理状态。
 
 ## 安装
 
@@ -36,6 +37,11 @@ const cleanup = filePaste({
   onError: (error) => {
     console.error('文件处理错误：', error)
   },
+  onProgress: ({ processedCount, totalFiles, processedFiles, done }) => {
+    console.log(`已处理文件数：${processedCount}/${totalFiles}`)
+    console.log('当前已处理的文件列表：', processedFiles)
+    console.log(done ? '所有文件处理完成' : '文件处理中...')
+  },
   debug: true,
   preProcess: (file, content) => {
     console.log('预处理文件内容：', file.name)
@@ -49,9 +55,11 @@ const cleanup = filePaste({
     return file
   },
   formDataKey: (fileName, fileType) => `${fileName}-${fileType}`,
+  splitFormData: true, // 每个文件单独生成一个 FormData
 })
 
 // 调用 cleanup() 以移除事件监听器并释放资源
+cleanup()
 ```
 
 ## 配置选项
@@ -62,11 +70,21 @@ const cleanup = filePaste({
 - `returnType`：处理文件的返回类型，可选值为 `'text'`、`'blob'`、`'arrayBuffer'` 或 `'formData'`，默认值为 `'blob'`。
 - `allowedTypes`：允许的文件 MIME 类型数组。
 - `onComplete`：所有文件处理完成时触发的回调函数。
-- `onError`：文件处理过程中发生错误时触发的回调函数。
+  - 如果 `returnType` 是 `'formData'`，接收一个 `FormData` 或 `FormData[]`。
+  - 否则，接收一个处理后的文件对象数组。
+- `onError`：文件处理过程中发生错误时触发的回调函数，接收一个包含文件和错误原因的对象。
+- `onProgress`：文件处理进度更新回调函数，实时获取文件处理状态。
+  - 参数：
+    - `processedCount`：已处理的文件数量。
+    - `totalFiles`：总文件数量。
+    - `processedFiles`：当前已处理的文件列表。
+    - `done`：是否所有文件都已处理完成。
 - `debug`：是否启用调试日志。
 - `preProcess`：在返回文件内容之前对其进行预处理的回调函数。
+  - 接收文件和其内容，并返回处理后的内容。
 - `preProcessFile`：在文件处理前对文件进行过滤或压缩的回调函数，返回 `null` 时文件会被过滤掉。
 - `formDataKey`：自定义将文件附加到 `FormData` 的键，可以是字符串或函数。
+- `splitFormData`：控制是否分割 `FormData`，当 `returnType` 为 `'formData'` 时有效。
 
 ## 清理资源
 
