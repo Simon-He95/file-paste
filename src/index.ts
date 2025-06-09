@@ -42,15 +42,6 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
   debug?: boolean
   preProcess?: (file: File, content: any) => any
   formDataKey?: string | ((fileName: string, fileType: string) => string)
-  /**
-   * 文件处理进度更新回调。
-   *
-   * @param {object} info - 进度信息。
-   * @param {number} info.processedCount - 已处理的文件数量。
-   * @param {number} info.totalFiles - 总文件数量。
-   * @param {ProcessedFile[]} info.processedFiles - 当前已处理的文件列表。
-   * @param {boolean} info.done - 是否所有文件都已处理完成。
-   */
   onProgress?: (info: {
     processedCount: number
     totalFiles: number
@@ -61,132 +52,121 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
   splitFormData?: boolean
 }) {
   const returnType = option.returnType || 'blob'
-  let processedFiles: ProcessedFile[] = []
-  const formData = new FormData()
-  const formDataList: FormData[] = []
-  const errorPromises: Promise<void>[] = []
+  let processedFiles: ProcessedFile[] = [] // 每次粘贴事件独立的 processedFiles
   let processedCount = 0
   let totalFiles = 0
-
-  const handleFileRead = (file: File, content: any): Blob | ArrayBuffer | string => {
-    if (option.returnType === 'blob') {
-      return new Blob([content], { type: file.type })
-    }
-    else if (option.returnType === 'arrayBuffer') {
-      return content as ArrayBuffer
-    }
-    else {
-      return content as string
-    }
-  }
-
-  const appendToFormData = (file: File, targetFormData: FormData) => {
-    const key
-      = typeof option.formDataKey === 'function'
-        ? option.formDataKey(file.name, file.type)
-        : option.formDataKey || file.name
-    targetFormData.append(key, file)
-  }
-
-  const removeFileHelper = (processedFile: ProcessedFile, index: number) => {
-    if (processedFile.isRemoved) {
-      if (option.debug) {
-        console.warn(`File ${processedFile.name} is already removed.`)
-      }
-      return
-    }
-    // 从 processedFiles 中移除该文件
-    processedFiles.splice(index, 1)
-    // 释放预览 URL
-    if (processedFile.previewUrl) {
-      URL.revokeObjectURL(processedFile.previewUrl)
-    }
-    processedFile.isRemoved = true
-    // 更新总文件数
-    totalFiles--
-    if (option.debug) {
-      // eslint-disable-next-line no-console
-      console.log(`Removed file: ${processedFile.name}. Total files: ${totalFiles}.`)
-    }
-    // 调用 onProgress 回调
-    option.onProgress?.({
-      processedCount,
-      totalFiles,
-      processedFiles: processedFiles.map(file => ({ ...file, status: file?.status || 'pending' })),
-      done: processedCount === totalFiles,
-    })
-  }
-
-  const addToProcessedFiles = (processedFile: ProcessedFile, content: any, index: number) => {
-    const processedContent = option.preProcess ? option.preProcess(processedFile.file, content) : handleFileRead(processedFile.file, content)
-    const updatedFile: ProcessedFile = {
-      ...processedFile,
-      content: processedContent,
-      status: 'done',
-      removeFile: () => {
-        removeFileHelper(updatedFile, index)
-      },
-    }
-    processedFiles[index] = updatedFile
-  }
-
-  const handleError = (error: { file: File, reason: string }) => {
-    const errorPromise = option.onError ? Promise.resolve(option.onError(error)) : Promise.resolve()
-    errorPromises.push(errorPromise)
-  }
-
-  const handleFileProcessed = () => {
-    processedCount++
-    if (option.debug) {
-      // eslint-disable-next-line no-console
-      console.log(`Processed ${processedCount}/${totalFiles} files.`)
-    }
-    if (processedCount === totalFiles && option.onComplete) {
-      if (returnType === 'formData') {
-        if (option.splitFormData) {
-          option.onComplete(formDataList as any)
-        }
-        else {
-          option.onComplete(formData as any)
-        }
-      }
-      else {
-        option.onComplete(processedFiles as any)
-      }
-    }
-    option.onProgress?.({
-      processedCount,
-      totalFiles,
-      processedFiles: processedFiles.map(file => ({ ...file, status: file?.status || 'pending' })),
-      done: processedCount === totalFiles,
-    })
-  }
-
+  const formData = new FormData()
+  const formDataList: FormData[] = []
   const pasteHandler = (event: ClipboardEvent) => {
-    processedCount = 0
     const items = event.clipboardData?.items
     if (!items)
       return
 
-    const fileItems = Array.from(items).filter(item => item.kind === 'file')
-    totalFiles = fileItems.length
+    const handleFileProcessed = async () => {
+      processedCount++
+      if (option.debug) {
+        // eslint-disable-next-line no-console
+        console.log(`Processed ${processedCount}/${totalFiles} files.`)
+      }
 
-    processedFiles = fileItems.map((item, index) => {
+      // 等待 onProgress 的异步操作完成
+      if (option.onProgress) {
+        const progressInfo = {
+          processedCount,
+          totalFiles,
+          processedFiles,
+          done: processedCount === totalFiles,
+        }
+        if (option.onProgress.constructor.name === 'AsyncFunction') {
+          await option.onProgress(progressInfo)
+        }
+        else {
+          option.onProgress(progressInfo)
+        }
+      }
+
+      // 检查是否所有文件都已处理完成
+      if (processedCount === totalFiles && option.onComplete) {
+        if (returnType === 'formData') {
+          if (option.splitFormData) {
+            option.onComplete(formDataList as any)
+          }
+          else {
+            option.onComplete(formData as any)
+          }
+        }
+        else {
+          option.onComplete(processedFiles as any)
+        }
+      }
+    }
+
+    const removeFileHelper = (processedFile: ProcessedFile) => {
+      if (processedFile.isRemoved) {
+        if (option.debug) {
+          console.warn(`File ${processedFile.name} is already removed.`)
+        }
+        return
+      }
+      if (processedFile.previewUrl) {
+        URL.revokeObjectURL(processedFile.previewUrl)
+      }
+      processedFile.isRemoved = true
+      totalFiles--
+      processedCount--
+      option.onProgress?.({
+        processedCount,
+        totalFiles,
+        processedFiles: processedFiles.map((file) => {
+          const isRemoved = file.id === processedFile.id ? true : file.isRemoved
+          file.isRemoved = isRemoved
+          return { ...file, status: file?.status || 'pending' }
+        }),
+        done: processedCount === totalFiles,
+      })
+      // 将已删除的文件从 processedFiles 中移除
+      processedFiles = processedFiles.filter(file => file.id !== processedFile.id)
+    }
+
+    const addToProcessedFiles = (processedFile: ProcessedFile, content: any) => {
+      const processedContent = option.preProcess
+        ? option.preProcess(processedFile.file, content)
+        : content
+      const updatedFile: ProcessedFile = {
+        ...processedFile,
+        content: processedContent,
+        status: 'done',
+        removeFile: () => {
+          removeFileHelper(updatedFile)
+        },
+      }
+      // 更新 processedFiles 数组中的文件状态
+      const index = processedFiles.findIndex(file => file.id === updatedFile.id)
+
+      if (index !== -1) {
+        processedFiles[index] = updatedFile
+      }
+      else {
+        // 已经被 remove
+      }
+    }
+
+    const needProcessedFiles = Array.from(items).map((item) => {
       const file = item.getAsFile()
       if (!file)
         return null
       if (option.allowedTypes && !option.allowedTypes.includes(file.type)) {
-        handleError({ file, reason: `File type ${file.type} is not allowed.` })
+        option.onError?.({ file, reason: `File type ${file.type} is not allowed.` })
         return null
       }
       if (option.maxSize && file.size > option.maxSize) {
-        handleError({ file, reason: `File size ${file.size} exceeds the maximum size of ${option.maxSize} bytes.` })
+        option.onError?.({ file, reason: `File size ${file.size} exceeds the maximum size of ${option.maxSize} bytes.` })
         return null
       }
 
       const processedFile = option.preProcessFile ? option.preProcessFile(file) : file
       if (!processedFile) {
-        handleError({ file, reason: 'File was filtered out by preProcessFile hook.' })
+        option.onError?.({ file, reason: 'File was filtered out by preProcessFile hook.' })
         return null
       }
       const previewUrl = URL.createObjectURL(processedFile)
@@ -201,12 +181,21 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
         status: 'pending',
         isRemoved: false,
         removeFile: () => {
-          removeFileHelper(result, index)
+          removeFileHelper(result)
         },
         file: processedFile,
       }
       return result
     }).filter(Boolean) as ProcessedFile[]
+    processedFiles.push(...needProcessedFiles)
+
+    totalFiles = processedFiles.length
+    if (totalFiles === 0) {
+      if (option.debug) {
+        console.warn('No valid files found in the paste event.')
+      }
+      return
+    }
 
     option.onProgress?.({
       processedCount,
@@ -215,7 +204,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
       done: false,
     })
 
-    processedFiles.forEach((processedFile, index) => {
+    needProcessedFiles.forEach((processedFile) => {
       const reader = new FileReader()
       reader.onload = (e) => {
         const content = e.target?.result
@@ -229,15 +218,15 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
           if (returnType === 'formData') {
             if (option.splitFormData) {
               const singleFormData = new FormData()
-              appendToFormData(processedFile.file, singleFormData)
+              singleFormData.append(processedFile.name, processedFile.file)
               formDataList.push(singleFormData)
             }
             else {
-              appendToFormData(processedFile.file, formData)
+              formData.append(processedFile.name, processedFile.file)
             }
           }
           else {
-            addToProcessedFiles(processedFile, content, index)
+            addToProcessedFiles(processedFile, content)
           }
         }
         handleFileProcessed()
@@ -250,14 +239,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
         reader.readAsBinaryString(processedFile.file)
       }
       else if (returnType === 'formData') {
-        if (option.splitFormData) {
-          const singleFormData = new FormData()
-          appendToFormData(processedFile.file, singleFormData)
-          formDataList.push(singleFormData)
-        }
-        else {
-          appendToFormData(processedFile.file, formData)
-        }
+        addToProcessedFiles(processedFile, formData)
         handleFileProcessed()
       }
       else {
@@ -270,10 +252,5 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
 
   return () => {
     document.removeEventListener('paste', pasteHandler)
-    processedFiles.forEach((file) => {
-      if (file.previewUrl) {
-        URL.revokeObjectURL(file.previewUrl)
-      }
-    })
   }
 }

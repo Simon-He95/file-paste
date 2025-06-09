@@ -12,8 +12,9 @@ file-paste 是一个开箱即用的工具，用于捕获粘贴事件并对粘贴
 - **文件预处理钩子**：支持在文件处理前进行过滤或压缩。
 - **错误处理**：提供回调函数处理文件处理过程中的错误。
 - **调试模式**：可启用调试日志，跟踪文件处理进度。
-- **实时进度更新**：通过 `onProgress` 回调实时获取文件处理状态。
+- **实时进度更新**：通过 `onProgress` 回调实时获取文件处理状态，支持异步操作。
 - **文件移除功能**：支持移除已处理的文件，并释放相关资源。
+- **分割 FormData**：支持将每个文件单独生成一个 `FormData` 对象。
 
 ## 安装
 
@@ -38,10 +39,12 @@ const cleanup = filePaste({
   onError: (error) => {
     console.error('文件处理错误：', error)
   },
-  onProgress: ({ processedCount, totalFiles, processedFiles, done }) => {
+  onProgress: async ({ processedCount, totalFiles, processedFiles, done }) => {
     console.log(`已处理文件数：${processedCount}/${totalFiles}`)
     console.log('当前已处理的文件列表：', processedFiles)
     console.log(done ? '所有文件处理完成' : '文件处理中...')
+    // 模拟异步操作
+    await new Promise(resolve => setTimeout(resolve, 1000))
   },
   debug: true,
   preProcess: (file, content) => {
