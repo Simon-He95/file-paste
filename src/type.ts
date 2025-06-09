@@ -1,5 +1,9 @@
 export interface ProcessedFile {
   /**
+   * 文件的唯一标识符
+   */
+  id: string
+  /**
    * 文件名
    */
   name: string

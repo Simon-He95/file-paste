@@ -163,6 +163,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
   }
 
   const pasteHandler = (event: ClipboardEvent) => {
+    processedCount = 0
     const items = event.clipboardData?.items
     if (!items)
       return
@@ -190,6 +191,7 @@ export function filePaste<T extends 'text' | 'blob' | 'arrayBuffer' | 'formData'
       }
       const previewUrl = URL.createObjectURL(processedFile)
       const result: ProcessedFile = {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: processedFile.name,
         size: processedFile.size,
         type: processedFile.type,
