@@ -123,6 +123,11 @@ function printData() {
 
 <template>
   <div class="container mx-auto p-6">
+    <!-- 提示区域 -->
+    <div class="text-center mb-4 p-4 bg-blue-100 text-blue-800 rounded-lg shadow-md">
+      📋 提示：请复制文件或图片，然后在当前页面粘贴即可上传！
+    </div>
+
     <h1 class="text-4xl font-extrabold text-center mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500">
       🚀 文件粘贴上传与预览 ✨
     </h1>
