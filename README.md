@@ -100,3 +100,7 @@ const cleanup = filePaste({ })
 // 在不需要时调用 cleanup
 cleanup()
 ```
+
+## 演示链接
+
+[在线演示](https://file-paste-playground.netlify.app/)
