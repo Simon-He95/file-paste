@@ -48,6 +48,66 @@
       </div>
     </transition>
 
+    <!-- 数据展示弹窗 -->
+    <transition name="zoom-fade">
+      <div
+        v-if="showDataPopup"
+        class="fixed z-10 inset-0 bg-black bg-opacity-70 flex justify-center items-center"
+        @click.self="closeDataPopup"
+      >
+        <div class="bg-gradient-to-r from-purple-500 via-blue-500 to-indigo-500 text-white rounded-xl shadow-2xl p-8 w-3/4 max-h-3/4 overflow-auto relative">
+          <h2 class="text-2xl font-extrabold mb-6 text-center">📂 上传文件数据</h2>
+          <pre class="bg-gray-900 bg-opacity-80 p-6 rounded-lg text-sm text-green-300 overflow-auto">
+{{ JSON.stringify(logData, null, 2) }}
+          </pre>
+          <div class="flex justify-end mt-4">
+            <button
+              @click="copyData"
+              class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition flex items-center space-x-2"
+            >
+              
+              <svg
+                                v-if="copySuccess"
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5 text-green-300"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+              <span v-if="!copySuccess">复制数据</span>
+              <span v-else>复制成功</span>
+            </button>
+          </div>
+          <button
+            @click="closeDataPopup"
+            class="absolute top-4 right-4 text-white hover:text-gray-300 transition"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </transition>
+
     <!-- 提示区域 -->
     <div class="text-center mb-4 p-4 bg-blue-100 text-blue-800 rounded-lg shadow-md">
       📋 提示：请复制文件或图片，然后在当前页面粘贴即可上传！
@@ -118,7 +178,7 @@
       <button
         class="px-6 py-3 text-lg font-bold text-white rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 hover:from-blue-900 hover:via-purple-800 hover:to-black shadow-lg transform transition-all duration-500 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="!canPrint"
-        @click="printData"
+        @click="showDataPopup = true"
       >
         🌞 获取数据 🌙
       </button>
@@ -132,9 +192,39 @@ import { filePaste } from '../../src/index'
 
 const uploadFiles = ref([])
 const errorMessage = ref(null)
+const showDataPopup = ref(false)
+const copySuccess = ref(false) // 控制复制成功状态
+
+const logData = computed(() => {
+  return uploadFiles.value.map(item => ({
+    id: item.id,
+    name: item.name,
+    type: item.type,
+    size: item.size,
+    status: item.status,
+    previewUrl: item.previewUrl,
+    lastModified: item.lastModified
+  }))
+})
 
 function closeError() {
   errorMessage.value = null
+}
+
+function closeDataPopup() {
+  showDataPopup.value = false
+}
+
+function copyData() {
+  const data = JSON.stringify(logData.value, null, 2)
+  navigator.clipboard.writeText(data).then(() => {
+    copySuccess.value = true
+    setTimeout(() => {
+      copySuccess.value = false // 恢复为原始状态
+    }, 1500) // 1.5秒后恢复
+  }).catch(() => {
+    console.error('复制失败，请手动复制！')
+  })
 }
 
 onMounted(() => {
@@ -164,7 +254,7 @@ onMounted(() => {
         }
       })
     },
-    maxSize: 100000,
+    maxSize: 10000000,
     onError(err) {
       errorMessage.value = {
         fileName: err.file.name,
@@ -256,7 +346,16 @@ const canPrint = computed(() => {
 })
 
 function printData() {
-  console.log('上传文件数据:', uploadFiles.value)
+  console.log('上传文件数据:', JSON.stringify(uploadFiles.value?.map(item => ({
+            id: item.id,
+            name: item.name,
+            type: item.type,
+            size: item.size,
+            status: item.status,
+            previewUrl: item.previewUrl,
+            lastModified: item.lastModified,
+})), null, 2))
+  
 }
 </script>
 
@@ -301,5 +400,35 @@ body {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 添加炫酷的动画效果 */
+.zoom-fade-enter-active {
+  animation: zoomFadeIn 0.5s ease-out;
+}
+.zoom-fade-leave-active {
+  animation: zoomFadeOut 0.3s ease-in;
+}
+
+@keyframes zoomFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes zoomFadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.8);
+  }
 }
 </style>
