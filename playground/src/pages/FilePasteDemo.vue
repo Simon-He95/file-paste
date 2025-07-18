@@ -65,8 +65,8 @@
           </h2>
           <pre
             class="bg-gray-900 bg-opacity-80 p-6 rounded-lg text-sm text-green-300 overflow-auto"
-            >{{ JSON.stringify(logData, null, 2) }}
-          </pre>
+            >{{ JSON.stringify(logData, null, 2) }}</pre
+          >
           <div class="flex justify-end mt-4">
             <button
               @click="copyData"
@@ -118,25 +118,78 @@
     <div
       class="text-center mb-4 p-4 bg-blue-100 text-blue-800 rounded-lg shadow-md"
     >
-      📋 提示：请复制文件或图片，然后在当前页面粘贴即可上传！
+      📋 提示：可拖拽、选择文件或粘贴图片/文件到页面上传！
     </div>
 
     <h1
       class="text-4xl font-extrabold text-center mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"
     >
-      🚀 文件粘贴上传与预览 ✨
+      🚀 文件拖拽/选择/粘贴上传与预览 ✨
     </h1>
+
+    <div class="flex flex-col gap-4 mb-6 justify-center items-center">
+      <input
+        type="file"
+        multiple
+        @change="onInputChange"
+        class="px-4 py-2 border rounded shadow hidden"
+      />
+      <div
+        class="drop-zone-custom"
+        @dragover.prevent="isDragOver = true"
+        @dragleave.prevent="isDragOver = false"
+        @drop="onDrop"
+        :class="{ 'drag-over': isDragOver }"
+      >
+        <div class="flex flex-col items-center justify-center h-full">
+          <svg
+            width="48"
+            height="48"
+            fill="none"
+            viewBox="0 0 48 48"
+            class="mb-2"
+          >
+            <rect width="48" height="48" rx="16" fill="url(#dragGradient)" />
+            <path
+              d="M24 14v14m0 0l-6-6m6 6l6-6"
+              stroke="#fff"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <defs>
+              <linearGradient
+                id="dragGradient"
+                x1="0"
+                y1="0"
+                x2="48"
+                y2="48"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stop-color="#7F9CF5" />
+                <stop offset="1" stop-color="#B794F4" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div class="text-lg font-bold text-gray-700 mb-1">
+            拖拽文件到此区域上传
+          </div>
+          <div class="text-sm text-gray-500">支持图片、文档等多种类型</div>
+        </div>
+      </div>
+      <div class="p-2 text-gray-500">或直接粘贴文件/图片</div>
+    </div>
+
     <transition-group
       name="bubble-to-card"
       tag="div"
       class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
     >
       <div
-        v-for="item in uploadFiles"
+        v-for="item in files"
         :key="item.id"
         class="relative p-4 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 rounded-lg shadow-md transform transition-transform duration-300 hover:scale-105 hover:shadow-lg"
       >
-        <!-- 文件预览 -->
         <div
           class="flex justify-center items-center h-32 bg-white rounded-lg overflow-hidden shadow-inner"
         >
@@ -156,8 +209,6 @@
             />
           </template>
         </div>
-
-        <!-- 文件信息 -->
         <div class="mt-4 text-center">
           <div
             class="text-lg font-semibold text-gray-800 dark:text-gray-100 truncate"
@@ -168,8 +219,6 @@
             {{ item.type }}
           </div>
         </div>
-
-        <!-- 状态 -->
         <div
           class="absolute top-2 right-2 px-2 py-1 text-xs font-bold rounded-full transition-colors duration-300"
           :class="
@@ -180,8 +229,6 @@
         >
           {{ item.status === 'pending' ? '加载中...' : '完成' }}
         </div>
-
-        <!-- 删除按钮 -->
         <button
           class="absolute bottom-2 right-2 px-2 py-1 text-xs font-bold rounded bg-red-500 text-white hover:bg-red-600 transition"
           @click="deleteFile(item)"
@@ -191,7 +238,6 @@
       </div>
     </transition-group>
 
-    <!-- 打印按钮 -->
     <div class="text-center mt-6">
       <button
         class="px-6 py-3 text-lg font-bold text-white rounded-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 hover:from-blue-900 hover:via-purple-800 hover:to-black shadow-lg transform transition-all duration-500 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -204,17 +250,19 @@
   </div>
 </template>
 
-<script setup>
-import { computed, onMounted, ref } from 'vue'
-import { filePaste } from '../../../src/index'
+<script setup lang="ts">
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 
-const uploadFiles = ref([])
-const errorMessage = ref(null)
+const isDragOver = ref(false)
+import { filePaste, type ProcessedFile } from '../../../src/index'
+
+const files = ref<ProcessedFile[]>([])
+const errorMessage = ref<any>(null)
 const showDataPopup = ref(false)
-const copySuccess = ref(false) // 控制复制成功状态
+const copySuccess = ref(false)
 
 const logData = computed(() => {
-  return uploadFiles.value.map((item) => ({
+  return files.value.map((item) => ({
     id: item.id,
     name: item.name,
     type: item.type,
@@ -228,11 +276,9 @@ const logData = computed(() => {
 function closeError() {
   errorMessage.value = null
 }
-
 function closeDataPopup() {
   showDataPopup.value = false
 }
-
 function copyData() {
   const data = JSON.stringify(logData.value, null, 2)
   navigator.clipboard
@@ -240,84 +286,38 @@ function copyData() {
     .then(() => {
       copySuccess.value = true
       setTimeout(() => {
-        copySuccess.value = false // 恢复为原始状态
-      }, 1500) // 1.5秒后恢复
+        copySuccess.value = false
+      }, 1500)
     })
     .catch(() => {
       console.error('复制失败，请手动复制！')
     })
 }
 
-onMounted(() => {
-  filePaste({
-    onProgress(info) {
-      info.processedFiles.forEach((file) => {
-        const existingFile = uploadFiles.value.find((f) => f.id === file.id)
-        if (existingFile) {
-          if (file.isRemoved) {
-            // 移除
-            uploadFiles.value = uploadFiles.value.filter(
-              (f) => f.id !== file.id,
-            )
-          } else {
-            // 如果文件已存在，更新状态
-            if (!file.isRemoved) {
-              const fileToUpdate = uploadFiles.value.find(
-                (f) => f.id === file.id,
-              )
-              if (fileToUpdate) {
-                setTimeout(() => {
-                  Object.assign(fileToUpdate, file)
-                }, 500) // 确保状态更新在下一个事件循环中
-              }
-            }
-          }
-        } else if (!file.isRemoved) {
-          uploadFiles.value.push(file)
-        }
-      })
-    },
-    maxSize: 10000000,
-    onError(err) {
-      errorMessage.value = {
-        fileName: err.file.name,
-        reason: err.reason,
-      }
-    },
-  })
-})
-
-function preview(item) {
+function preview(item: ProcessedFile) {
   const previewUrl = item.previewUrl
   if (item.type.startsWith('image/')) {
     const win = window.open(previewUrl, '_blank')
-    if (win) {
-      win.focus()
-    }
+    if (win) win.focus()
   } else if (item.type.startsWith('text/')) {
     const reader = new FileReader()
     reader.onload = () => {
-      errorMessage.value = `文件内容:\n${reader.result}`
+      errorMessage.value = {
+        fileName: item.name,
+        reason: `文件内容:\n${reader.result}`,
+      }
     }
     reader.readAsText(item.file)
   } else {
     const win = window.open(previewUrl, '_blank')
-    if (win) {
-      win.focus()
-    } else {
-      errorMessage.value = '请允许弹出窗口'
-    }
+    if (win) win.focus()
+    else errorMessage.value = { fileName: item.name, reason: '请允许弹出窗口' }
   }
 }
 
-function getFileTypeIcon(type) {
+function getFileTypeIcon(type: string) {
   if (type.startsWith('application/pdf')) {
-    return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-        <rect width="48" height="48" rx="8" fill="#E53E3E"></rect>
-        <text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">PDF</text>
-      </svg>
-    `
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"><rect width="48" height="48" rx="8" fill="#E53E3E"></rect><text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">PDF</text></svg>`
   }
   if (
     type.startsWith('application/msword') ||
@@ -325,12 +325,7 @@ function getFileTypeIcon(type) {
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     )
   ) {
-    return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-        <rect width="48" height="48" rx="8" fill="#3182CE"></rect>
-        <text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">Word</text>
-      </svg>
-    `
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"><rect width="48" height="48" rx="8" fill="#3182CE"></rect><text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">Word</text></svg>`
   }
   if (
     type.startsWith('application/vnd.ms-excel') ||
@@ -338,139 +333,96 @@ function getFileTypeIcon(type) {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
   ) {
-    return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-        <rect width="48" height="48" rx="8" fill="#38A169"></rect>
-        <text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">Excel</text>
-      </svg>
-    `
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"><rect width="48" height="48" rx="8" fill="#38A169"></rect><text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">Excel</text></svg>`
   }
   if (
     type.startsWith('application/zip') ||
     type.startsWith('application/x-rar-compressed')
   ) {
-    return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-        <rect width="48" height="48" rx="8" fill="#DD6B20"></rect>
-        <text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">ZIP</text>
-      </svg>
-    `
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"><rect width="48" height="48" rx="8" fill="#DD6B20"></rect><text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">ZIP</text></svg>`
   }
-  // Default placeholder icon
-  return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-      <rect width="48" height="48" rx="8" fill="#A0AEC0"></rect>
-      <text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">File</text>
-    </svg>
-  `
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48"><rect width="48" height="48" rx="8" fill="#A0AEC0"></rect><text x="24" y="24" font-size="12" fill="white" text-anchor="middle" dominant-baseline="central" font-family="Arial, sans-serif">File</text></svg>`
 }
 
-function deleteFile(item) {
-  console.log('deleteFile', item)
-  item.removeFile()
-  // const index = uploadFiles.value.findIndex(file => file.id === id)
-  // if (index !== -1) {
-  //   uploadFiles.value.splice(index, 1)
-  // }
+function deleteFile(item: ProcessedFile) {
+  item.removeFile?.()
 }
 
 const canPrint = computed(() => {
   return (
-    uploadFiles.value.length > 0 &&
-    uploadFiles.value.every((file) => file.status === 'done')
+    files.value.length > 0 &&
+    files.value.every((file) => file.status === 'done')
   )
 })
 
-function printData() {
-  console.log(
-    '上传文件数据:',
-    JSON.stringify(
-      uploadFiles.value?.map((item) => ({
-        id: item.id,
-        name: item.name,
-        type: item.type,
-        size: item.size,
-        status: item.status,
-        previewUrl: item.previewUrl,
-        lastModified: item.lastModified,
-      })),
-      null,
-      2,
-    ),
-  )
+const pasteHelper = filePaste({
+  allowedTypes: ['image/png', 'image/jpeg', 'image/gif'],
+  maxSize: 5 * 1024 * 1024,
+  debug: true,
+  returnType: 'blob',
+  onComplete: (result: ProcessedFile[]) => {
+    files.value = result
+  },
+  onError: (err) => {
+    errorMessage.value = { fileName: err.file.name, reason: err.reason }
+  },
+  onProgress: (info) => {
+    info.processedFiles.forEach((file) => {
+      const existingFile = files.value.find((f) => f.id === file.id)
+      if (existingFile) {
+        if (file.isRemoved) {
+          files.value = files.value.filter((f) => f.id !== file.id)
+        } else {
+          setTimeout(() => {
+            Object.assign(existingFile, file)
+          }, 500)
+        }
+      } else if (!file.isRemoved) {
+        files.value.push(file)
+      }
+    })
+  },
+})
+
+function onInputChange(e: Event) {
+  pasteHelper.inputHandler(e)
 }
+function onDrop(e: DragEvent) {
+  isDragOver.value = false
+  pasteHelper.dropHandler(e)
+}
+
+onMounted(() => {})
+onUnmounted(() => {
+  pasteHelper.destroy()
+})
 </script>
 
-<style>
-body {
-  background-color: #f9fafb;
+<style scoped>
+.demo-container {
+  max-width: 600px;
+  margin: 40px auto;
+  font-family: Arial, sans-serif;
 }
-
-.bubble-to-card-enter-active {
-  animation: bubbleToCard 0.5s ease-out;
+.drop-zone-custom {
+  width: 100%;
+  max-width: 480px;
+  min-height: 160px;
+  background: linear-gradient(135deg, #f3f0ff 0%, #e9d8fd 100%);
+  border: 2px dashed #a78bfa;
+  border-radius: 24px;
+  box-shadow: 0 4px 24px 0 rgba(127, 156, 245, 0.08);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin: 0 auto;
+  position: relative;
 }
-.bubble-to-card-leave-active {
-  animation: fadeOut 0.3s ease-in;
-}
-
-@keyframes bubbleToCard {
-  from {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes fadeOut {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.5s;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-/* 添加炫酷的动画效果 */
-.zoom-fade-enter-active {
-  animation: zoomFadeIn 0.5s ease-out;
-}
-.zoom-fade-leave-active {
-  animation: zoomFadeOut 0.3s ease-in;
-}
-
-@keyframes zoomFadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes zoomFadeOut {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.8);
-  }
+.drop-zone-custom.drag-over {
+  border-color: #805ad5;
+  background: linear-gradient(135deg, #e9d8fd 0%, #c3aed6 100%);
+  box-shadow: 0 8px 32px 0 rgba(127, 156, 245, 0.16);
 }
 </style>

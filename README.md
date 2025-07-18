@@ -95,7 +95,7 @@ cleanup()
 `filePaste` 函数返回一个清理函数，用于移除粘贴事件监听器并释放所有临时 URL。
 
 ```typescript
-const cleanup = filePaste({ })
+const cleanup = filePaste({})
 
 // 在不需要时调用 cleanup
 cleanup()
